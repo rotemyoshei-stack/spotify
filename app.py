@@ -13,14 +13,7 @@ def fix_hebrew(text):
         reshaped = arabic_reshaper.reshape(text)
         return get_display(reshaped)
     return text
-
-st.set_page_config(page_title="Spotify Trends", layout="wide")
-st.title("🎵 Spotify Trends Dashboard")
-import os
-import json
-import pandas as pd
-import streamlit as st
-
+    
 # --- בחירת תיקייה ---
 st.sidebar.header("📂 בחירת תיקייה")
 folder_name = st.sidebar.text_input("שם תיקייה עם קבצי JSON", "data_folder")
@@ -46,7 +39,6 @@ else:
     st.sidebar.warning("⚠️ התיקייה לא קיימת")
     df = None
 
-
 if df is not None:
     # --- עיבוד ראשוני ---
     df['endTime'] = pd.to_datetime(df['endTime'])
@@ -56,7 +48,7 @@ if df is not None:
     df['weekNum'] = df['startTime'].dt.isocalendar().week
 
     st.header("🔎 מבט כללי על הנתונים")
-    st.dataframe(df.head(20))
+    st.dataframe(df.sort_values(['startTime']).head(20))
 
     # --- ניתוח אחוזי האזנה ---
     aggregated_data = df.groupby(['trackName','artistName']).agg(
