@@ -98,6 +98,9 @@ if df is not None:
 
     st.success(f"🏆 השיר שהחזיק הכי הרבה שבועות: **{fix_hebrew(weeks_aggregated_data.iloc[0]['trackName'])}** ({weeks_aggregated_data.iloc[0]['weeks_listened_to']} שבועות)")
 
+
+
+    
     # --- ניתוח פלייליסטים ---
     st.header("📂 ניתוח פלייליסטים")
     playlist_file = "Playlist1.json"
