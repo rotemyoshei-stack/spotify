@@ -1,386 +1,126 @@
-import pandas as pd
-import json as json
-from pandas import json_normalize
-import numpy as np
-# import seaborn as sns
-import matplotlib.pyplot as plt
-# from bidi.algorithm import fix_hebrew
-from matplotlib import rcParams
-import os
-
-# plt.rcParams['font.family'] = 'Arial'  # אפשר גם 'David', 'Frank Ruehl', או גופן אחר שתומך בעברית
-plt.rcParams['axes.unicode_minus'] = False  # כדי להימנע מתווים לא חוקיים בסימן מינוס
-pd.set_option('display.max_rows', None)
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', 1000)
-pd.set_option('display.colheader_justify', 'center')
-pd.set_option('display.precision', 2)
-
-import matplotlib.pyplot as plt
-
-"""ייבוא מידע"""
-
-from google.colab import drive
-import json
-import pandas as pd
-
-# Mount Google Drive
-drive.mount('/content/drive')
-
-import os
-
-# Replace with the actual path to your spotify project folder in Google Drive
-folder_path = '/content/drive/MyDrive/spotify project/liad'
-all_data = []
-
-if os.path.isdir(folder_path):
-    for filename in os.listdir(folder_path):
-        if filename.endswith('.json'):
-            file_path = os.path.join(folder_path, filename)
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    all_data.extend(data) # Assuming each JSON file contains a list of records
-                # print(f"Successfully loaded data from {file_path}") # Removed this line
-            except FileNotFoundError:
-                print(f"Error: File not found at {file_path}")
-            except json.JSONDecodeError:
-                print(f"Error: Could not decode JSON from {file_path}")
-            except Exception as e:
-                print(f"An error occurred while reading {file_path}: {e}")
-
-    # Now 'all_data' contains combined data from all JSON files
-    # You can create a pandas DataFrame from all_data
-    if all_data:
-        df = pd.DataFrame(all_data)
-        print("\nCombined DataFrame head:")
-        display(df.sort_values(['endTime']).tail())
-    else:
-        print("No JSON files found or no data loaded.")
-
-else:
-    print(f"Error: Folder not found at {folder_path}")
-
-# final df to work with
-original_df = df.copy() # Assign the original df to a new variable and create a copy
-original_df['endTime'] = pd.to_datetime(original_df['endTime']) # Convert endTime to datetime
-
-# Assign the loaded data to streams_df and perform initial type conversion
-streams_df = df.astype({'endTime': 'datetime64[ns]', 'artistName': str, 'trackName': str})
-display(streams_df.head(10))
-
-"""*הוספת* עמודות מחושבות"""
-
-# Use original_df which contains 'msPlayed' and now has 'endTime' in datetime format
-df = original_df.copy() # Create a copy to avoid modifying the original DataFrame
-
-df['secondsPlayed'] = df['msPlayed']/1000
-df['timePlayed'] = pd.to_timedelta(df['secondsPlayed'], unit='second')
-df['startTime'] = df['endTime'] - df['timePlayed']
-df['weekNum'] = df['startTime'].dt.isocalendar().week
-
-# It seems you are re-indexing and reordering columns,
-# ensure this is the desired outcome for streams_df
-df = df.sort_values(by='startTime')
-df['index_col'] = df.index
-df = df.reindex(columns=['index_col', 'startTime', 'endTime', 'artistName','trackName', 'timePlayed', 'secondsPlayed', 'msPlayed', 'weekNum']) # Added msPlayed and weekNum back
-
-streams_df = df # Update streams_df with the modified DataFrame
-display(streams_df.head(10))
-
-# --------- creating avg percentage of listening ---------
-results = df.groupby(['trackName'])['timePlayed'].mean().sort_values()
-aggregated_data = df.groupby(['trackName', 'artistName']).agg(
-    avg_play_time=('timePlayed', 'mean'),
-    times_played=('index_col', 'count'),
-    max_song_length = ('timePlayed', 'max')
-)
-aggregated_data = aggregated_data.reset_index()
-
-# calculate listening time
-aggregated_data['avg_percentage'] = (aggregated_data['avg_play_time'] / aggregated_data['max_song_length'])*100
-aggregated_data['avg_play_time'] = aggregated_data['avg_play_time'].dt.total_seconds().apply(lambda x: pd.to_datetime(x, unit='s').strftime('%H:%M:%S'))
-aggregated_data['max_song_length'] = aggregated_data['max_song_length'].dt.total_seconds().apply(lambda x: pd.to_datetime(x, unit='s').strftime('%H:%M:%S'))
-
-# remove songs played less than 1 time
-aggregated_data = aggregated_data[aggregated_data['times_played'] > 1]
-aggregated_data = aggregated_data[aggregated_data['max_song_length'] > '00:01:00']
-aggregated_data = aggregated_data.sort_values(by='avg_percentage', ascending=False)
-
-# final aggregated_data shows for each song: abg play time, times played, avg percentage of play
-display(aggregated_data.head(20))
-
-"""שירים עם אחוזי נטישה"""
-
-# top 5 songs in amount of streams, where listening percentage is the lowest
-
-data = aggregated_data.sort_values(by='avg_percentage', ascending=True).head(5)
-df = data.reindex(columns=['trackName', 'times_played', 'avg_percentage'])
-
-df_melted = df.melt(id_vars='trackName',
-                    value_vars=['times_played', 'avg_percentage'],
-                    var_name='Metric',
-                    value_name='Value')
-
-# Apply fix_hebrew to the track names in the melted DataFrame
-df_melted['trackName'] = df_melted['trackName'].apply(fix_hebrew)
-
-# Plot
-sns.barplot(data=df_melted, x='trackName', y='Value', hue='Metric', palette='Set2')
-
-plt.title("Track Stats: Times Played vs. Avg Percentage")
-plt.xlabel(fix_hebrew("Track name"))
-plt.show()
-plt.close()
-
-# songs passed on
-data = aggregated_data
-# Create a figure with two subplots (axes)
-fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-
-# Plot histogram on the first axis
-sns.histplot(x='avg_percentage', data=data, kde=True, stat='count', bins=20, ax=axes[0])
-axes[0].set_title(fix_hebrew("כמה אחוז מהשיר נשמע לפני העברה?"), loc='right')
-axes[0].set_xlabel(fix_hebrew("אחוז מהשיר"), horizontalalignment='right', x=0.5)
-axes[0].set_ylabel(fix_hebrew("כמות שירים"), horizontalalignment='right', y=0.5)
-
-# Display table on the second axis
-axes[1].axis('off') # Hide the axis
-table_data = data[["trackName", "avg_percentage","times_played", "artistName"]].sort_values(by = ["avg_percentage"]).head(10).copy()
-table_data['avg_percentage'] = table_data['avg_percentage'].round(2) # Round the average percentage
-table_data['trackName'] = table_data['trackName'].apply(fix_hebrew) # Apply fix_hebrew to track names
-table_data['artistName'] = table_data['artistName']
-
-table = axes[1].table(cellText=table_data.values,
-                     colLabels=[fix_hebrew("שם שיר"), fix_hebrew("אחוז ממוצע"),fix_hebrew("כמות השמעות"), fix_hebrew("שם אמן")], # Added Hebrew column labels
-                     loc='center')
-table.auto_set_font_size(False)
-table.set_fontsize(10)
-table.auto_set_column_width(col=list(range(len(table_data.columns))))
-
-# Adjust table properties for better appearance
-table.scale(1, 1.2) # Increase row height
-table.auto_set_column_width(col=list(range(len(table_data.columns)))) # Auto adjust column width again after scaling
-plt.tight_layout() # Adjust layout to prevent overlapping
-plt.show()
-
-streams_df=streams_df[['trackName','weekNum']]
-
-"""obssesion on songs
-
-
-"""
-
-# --------- creating listening data per week ---------
-df=streams_df[['trackName','weekNum']]
-# one row per week and song
-df_unique_weeks = df.drop_duplicates().sort_values(by=['weekNum','trackName'])
-display(df_unique_weeks.head(5))
-
-weeks_aggregated_data = df_unique_weeks.groupby('trackName').agg(
-    weeks_listened_to=('weekNum', 'count'))
-display(weeks_aggregated_data.head(10))
-
-# weeks listened to
-data = weeks_aggregated_data
-# Create a figure with two subplots (axes)
-fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-
-# Plot histogram on the first axis
-sns.histplot(x='weeks_listened_to', data=data, kde=True, stat='count', bins=20, ax=axes[0])
-axes[0].set_title(fix_hebrew("למשך כמה שבועות השיר נשמע"), loc='right')
-axes[0].set_xlabel(fix_hebrew("כמות שבועות"), horizontalalignment='right', x=0.5)
-axes[0].set_ylabel(fix_hebrew("כמות שירים"), horizontalalignment='right', y=0.5)
-
-# Add ticks to the x-axis
-max_weeks = data['weeks_listened_to'].max()
-axes[0].set_xticks(range(0, max_weeks + 1, 5))
-
-
-# Display table on the second axis
-axes[1].axis('off') # Hide the axis
-# Corrected to reset index and then select columns
-table_data = data.reset_index().sort_values(by=["weeks_listened_to"], ascending=False).head(20).copy()
-table_data['weeks_listened_to'] = table_data['weeks_listened_to'].astype(str).apply(fix_hebrew) # Apply fix_hebrew to rounded percentages and convert to string
-table_data['trackName'] = table_data['trackName'].apply(fix_hebrew) # Apply fix_hebrew to track names
-table_data = table_data.reindex(columns=['trackName', 'weeks_listened_to'])
-
-table = axes[1].table(cellText=table_data.values,
-                     colLabels=[fix_hebrew("שם שיר"), fix_hebrew("כמות שבועות")], # Added Hebrew column labels
-                     loc='center')
-table.auto_set_font_size(False)
-table.set_fontsize(10)
-table.auto_set_column_width(col=list(range(len(table_data.columns))))
-axes[1].set_title(fix_hebrew("10 שירים מובילים במצעד שבועי"), loc='center')
-
-
-# Adjust table properties for better appearance
-table.scale(1, 1.2) # Increase row height
-table.auto_set_column_width(col=list(range(len(table_data.columns)))) # Auto adjust column width again after scaling
-plt.tight_layout() # Adjust layout to prevent overlapping
-plt.show()
-
-temp = df_unique_weeks
-top_songs = weeks_aggregated_data.sort_values(by = 'weeks_listened_to', ascending=False).head(20)
-
-
-df_unique_weeks['week_start'] = df_unique_weeks['weekNum'].apply(lambda w: pd.to_datetime(f"2024-W{int(w)}-1", format="%G-W%V-%u"))
-df_unique_weeks['week_end'] = df_unique_weeks['week_start'] + pd.Timedelta(days=6)
-df_unique_weeks = df_unique_weeks.sort_values(by=['trackName', 'weekNum'])
-df_unique_weeks['diff'] = df_unique_weeks['weekNum'].diff()
-df_unique_weeks = df_unique_weeks.reset_index(drop=True)
-
-df_unique_weeks['Score'] = np.nan
-i = 0
-while i < len(df_unique_weeks):
-    song = df_unique_weeks['trackName'].iloc[i]
-
-    while i < len(df_unique_weeks) and df_unique_weeks['trackName'].iloc[i] == song:
-        if pd.notna(df_unique_weeks['diff'].iloc[i]):
-            if df_unique_weeks['diff'].iloc[i] <= 2:
-                df_unique_weeks.loc[df_unique_weeks.index[i], 'Score'] = df_unique_weeks['diff'].iloc[i]
-        i += 1
-
-display(df_unique_weeks.head(10))
-
-temp = df_unique_weeks
-df_unique_weeks = df_unique_weeks.dropna(subset=['diff'])
-display(temp.head(29))
-
-# Plot
-fig, ax = plt.subplots(figsize=(10, 4))
-
-for i, row in df_unique_weeks.iterrows():
-    ax.barh(y=row['trackName'], width=row['duration'], left=row['start'], height=0.4)
-ax.set_xlabel("Date")
-ax.set_ylabel("Task")
-ax.set_title("Gantt Chart")
-plt.tight_layout()
-plt.show()
-
-
-
-playlist_data = []
-file_path = r"C:\Users\ameba\Downloads\spotify_data\Spotify Account Data\Playlist1.json"  # Ensure this is the correct path
-with open(file_path, "r", encoding="utf-8") as file:
-    json_data = json.load(file)
-for playlist in json_data["playlists"]:
-    playlist_name = playlist.get("name", "Unknown Playlist")
-    last_modified = playlist.get("lastModifiedDate", "Unknown Date")
-    # Ensure "items" key exists and is a list
-    items = playlist.get("items", [])
-    if isinstance(items, list):
-        for item in items:
-            track = item.get("track")
-
-            if isinstance(track, dict):  # Ensure track is a dictionary
-                track_name = track.get("trackName", None)
-                artist_name = track.get("artistName", None)
-                album_name = track.get("albumName", None)
-                track_uri = track.get("trackUri", None)
-            else:
-                track_name = artist_name = album_name = track_uri = None
-
-            added_date = item.get("addedDate", None)
-
-            playlist_data.append({
-                "Playlist Name": playlist_name,
-                "Last Modified Date": last_modified,
-                "Track Name": track_name,
-                "Artist Name": artist_name,
-                "Album Name": album_name,
-                "Track URI": track_uri,
-                "Added Date": added_date
-            })
-df = pd.DataFrame(playlist_data)
-
-# Create DataFrame
-
-keep = df[['Track Name','Playlist Name']]
-keep = keep.rename(columns={"Track Name": "trackName", "Playlist Name":"playlistName"})
-keep['index_col'] = keep.index
-keep = keep.reindex(columns=['index_col', 'trackName', 'playlistName'])
-
-plalists = df['Playlist Name'].unique()
-display(plalists)
-
-aggregated_data = keep.groupby(['trackName']).agg(
-    Amonut=('trackName', 'count')
-)
-# display(aggregated_data.sort_values(['Amonut'], ascending=[False]))
-
-df_sorted = aggregated_data.sort_values(by='Amonut', ascending=False).head(5)
-
-sns.barplot(df_sorted, y="trackName", x="Amonut", orient='h')
-# Adding Title to the Plot
-plt.suptitle("top 5 songs")
-plt.title("in amount of appearances in playlists")
-# Setting the X and Y labels
-plt.xlabel('amount of appearances')
-plt.ylabel('song name')
-plt.show()
-
-sns.histplot(x='amonut', data=aggregated_data, kde=True, stat = 'count')
-# Adding Title to the Plot
-plt.suptitle("Distribution of appearances of songs in playlists")
-plt.title("how many times does a song appear in a playlist?")
-# Setting the X and Y labels
-plt.xlabel('amount of appearances')
-plt.ylabel('amount of songs')
-plt.show()
-
-aggregated_data = keep.groupby(['playlistName']).agg(
-    amonut=('trackName', 'count')
-)
-aggregated_data = aggregated_data.sort_values('amonut', ascending=False)
-
-# display(aggregated_data.sort_values(['amonut'], ascending=[False]))
-sns.barplot(aggregated_data,
-            y="playlistName",
-            x="amonut",
-           orient='h'
-           # order=aggregated_data.sort_values('amonut').State
-           )
-plt.suptitle("Size of playlists")
-plt.title("by amount of songs")
-plt.show()
-
-# connect to songs DB
-
 import streamlit as st
 import pandas as pd
 import numpy as np
+import seaborn as sns
 import matplotlib.pyplot as plt
+import arabic_reshaper
+from bidi.algorithm import get_display
+import os, json
 
-# כותרת ראשית
-st.title("Spotify Trends 🎵")
+# --- פונקציה לסידור טקסט בעברית ---
+def fix_hebrew(text):
+    if isinstance(text, str):
+        reshaped = arabic_reshaper.reshape(text)
+        return get_display(reshaped)
+    return text
 
-# דוגמה לנתונים (תוכלי להחליף בנתונים האמיתיים שלך)
-data = pd.DataFrame({
-    "Day": range(1, 11),
-    "Streams": np.random.randint(500, 2000, 10)
-})
+st.set_page_config(page_title="Spotify Trends", layout="wide")
+st.title("🎵 Spotify Trends Dashboard")
 
-# מציגים טבלה
-st.subheader("Raw Data")
-st.write(data)
+# --- טעינת נתונים ---
+st.sidebar.header("📂 בחירת נתונים")
+data_path = st.sidebar.text_input("נתיב לקובץ JSON", "spotify_data.json")
 
-# גרף אינטראקטיבי
-st.subheader("Line Chart")
-st.line_chart(data.set_index("Day"))
-
-# גרף מותאם אישית עם matplotlib
-st.subheader("Custom Matplotlib Plot")
-fig, ax = plt.subplots()
-ax.plot(data["Day"], data["Streams"], marker="o")
-ax.set_xlabel("Day")
-ax.set_ylabel("Streams")
-ax.set_title("Spotify Streams Trend")
-st.pyplot(fig)
-
-# תובנות
-st.subheader("Insights")
-if data["Streams"].iloc[-1] > data["Streams"].iloc[0]:
-    st.success("✅ המגמה הכללית היא עליה בהשמעות לאורך הימים 🎶")
+if os.path.exists(data_path):
+    with open(data_path, "r", encoding="utf-8") as f:
+        all_data = json.load(f)
+    df = pd.DataFrame(all_data)
+    st.sidebar.success("✅ נתונים נטענו בהצלחה")
 else:
-    st.warning("⚠️ נראה שיש ירידה בהשמעות בימים האחרונים")
+    st.sidebar.warning("⚠️ הקובץ לא נמצא. העלי אותו לריפו או שימי נתיב נכון.")
+    df = None
+
+if df is not None:
+    # --- עיבוד ראשוני ---
+    df['endTime'] = pd.to_datetime(df['endTime'])
+    df['secondsPlayed'] = df['msPlayed']/1000
+    df['timePlayed'] = pd.to_timedelta(df['secondsPlayed'], unit='second')
+    df['startTime'] = df['endTime'] - df['timePlayed']
+    df['weekNum'] = df['startTime'].dt.isocalendar().week
+
+    st.header("🔎 מבט כללי על הנתונים")
+    st.dataframe(df.head(20))
+
+    # --- ניתוח אחוזי האזנה ---
+    aggregated_data = df.groupby(['trackName','artistName']).agg(
+        avg_play_time=('timePlayed', 'mean'),
+        times_played=('trackName', 'count'),
+        max_song_length=('timePlayed', 'max')
+    ).reset_index()
+
+    aggregated_data['avg_percentage'] = (aggregated_data['avg_play_time'] / aggregated_data['max_song_length'])*100
+    aggregated_data = aggregated_data[aggregated_data['times_played'] > 1]
+    aggregated_data = aggregated_data[aggregated_data['max_song_length'] > pd.Timedelta(seconds=60)]
+    aggregated_data = aggregated_data.sort_values(by='avg_percentage', ascending=False)
+
+    st.header("📊 אחוזי האזנה לשירים")
+    st.dataframe(aggregated_data.head(20))
+
+    best_song = aggregated_data.iloc[0]
+    worst_song = aggregated_data.iloc[-1]
+    st.success(f"🎶 השיר עם האחוז הגבוה ביותר הוא **{fix_hebrew(best_song['trackName'])}** ({best_song['avg_percentage']:.1f}%)")
+    st.warning(f"⚠️ השיר עם האחוז הנמוך ביותר הוא **{fix_hebrew(worst_song['trackName'])}** ({worst_song['avg_percentage']:.1f}%)")
+
+    # גרף ברים לנטישה
+    st.subheader("📉 שירים עם אחוזי האזנה נמוכים ביותר")
+    low_songs = aggregated_data.sort_values(by='avg_percentage').head(5)
+    df_melted = low_songs.melt(
+        id_vars='trackName',
+        value_vars=['times_played','avg_percentage'],
+        var_name='Metric',
+        value_name='Value'
+    )
+    df_melted['trackName'] = df_melted['trackName'].apply(fix_hebrew)
+
+    fig, ax = plt.subplots(figsize=(8,4))
+    sns.barplot(data=df_melted, x='trackName', y='Value', hue='Metric', palette='Set2', ax=ax)
+    st.pyplot(fig)
+
+    # --- שירים לפי שבועות ---
+    st.header("📅 כמה שבועות שיר נשמע")
+    df_unique_weeks = df[['trackName','weekNum']].drop_duplicates().sort_values(by=['weekNum','trackName'])
+    weeks_aggregated_data = df_unique_weeks.groupby('trackName').agg(weeks_listened_to=('weekNum', 'count')).reset_index()
+
+    st.dataframe(weeks_aggregated_data.sort_values(by='weeks_listened_to', ascending=False).head(10))
+
+    fig, ax = plt.subplots(figsize=(8,4))
+    sns.histplot(x='weeks_listened_to', data=weeks_aggregated_data, bins=20, ax=ax)
+    ax.set_title(fix_hebrew("משך זמן הופעה במצעד שבועי"))
+    st.pyplot(fig)
+
+    st.success(f"🏆 השיר שהחזיק הכי הרבה שבועות: **{fix_hebrew(weeks_aggregated_data.iloc[0]['trackName'])}** ({weeks_aggregated_data.iloc[0]['weeks_listened_to']} שבועות)")
+
+    # --- ניתוח פלייליסטים ---
+    st.header("📂 ניתוח פלייליסטים")
+    playlist_file = "Playlist1.json"
+    if os.path.exists(playlist_file):
+        with open(playlist_file, "r", encoding="utf-8") as file:
+            playlist_json = json.load(file)
+
+        playlist_data = []
+        for playlist in playlist_json["playlists"]:
+            playlist_name = playlist.get("name", "Unknown")
+            items = playlist.get("items", [])
+            for item in items:
+                track = item.get("track", {})
+                playlist_data.append({
+                    "Playlist Name": playlist_name,
+                    "Track Name": track.get("trackName"),
+                    "Artist Name": track.get("artistName"),
+                })
+
+        pl_df = pd.DataFrame(playlist_data)
+        st.dataframe(pl_df.head(20))
+
+        # כמה פעמים שיר מופיע בפלייליסטים
+        agg = pl_df.groupby("Track Name").size().reset_index(name="count").sort_values(by="count", ascending=False)
+        st.subheader("🎼 השירים הכי פופולריים בפלייליסטים")
+        st.dataframe(agg.head(10))
+
+        fig, ax = plt.subplots(figsize=(8,4))
+        sns.barplot(agg.head(10), y="Track Name", x="count", ax=ax)
+        st.pyplot(fig)
+
+        st.info(f"⭐️ השיר שמופיע הכי הרבה בפלייליסטים הוא **{fix_hebrew(agg.iloc[0]['Track Name'])}** ({agg.iloc[0]['count']} הופעות)")
+    else:
+        st.warning("⚠️ לא נמצא קובץ Playlist1.json")
