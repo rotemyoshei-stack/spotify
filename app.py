@@ -2,7 +2,7 @@ import pandas as pd
 import json as json
 from pandas import json_normalize
 import numpy as np
-import seaborn as sns
+# import seaborn as sns
 import matplotlib.pyplot as plt
 # from bidi.algorithm import fix_hebrew
 from matplotlib import rcParams
