@@ -48,7 +48,7 @@ if df is not None:
     df['weekNum'] = df['startTime'].dt.isocalendar().week
 
     st.header("🔎 מבט כללי על הנתונים")
-    st.dataframe(df.sort_values(['startTime']).head(20))
+    st.dataframe(df.sort_values(['startTime'], ascending=False).head(20))
 
     # --- ניתוח אחוזי האזנה ---
     aggregated_data = df.groupby(['trackName','artistName']).agg(
