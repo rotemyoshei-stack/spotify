@@ -47,8 +47,8 @@ if df is not None:
     df['startTime'] = df['endTime'] - df['timePlayed']
     df['weekNum'] = df['startTime'].dt.isocalendar().week
 
-    st.header("🔎 מבט כללי על הנתונים")
-    st.dataframe(df.sort_values(['startTime'], ascending=False).head(20))
+    st.header("🔎 מבט כללי על הנתונים (10 השירים האחרונים שנטענו)")
+    st.dataframe(df.sort_values(['startTime'], ascending=False).head(10))
 
     # --- ניתוח אחוזי האזנה ---
     aggregated_data = df.groupby(['trackName','artistName']).agg(
@@ -63,7 +63,7 @@ if df is not None:
     aggregated_data = aggregated_data.sort_values(by='avg_percentage', ascending=False)
 
     st.header("📊 אחוזי האזנה לשירים")
-    st.dataframe(aggregated_data.head(20))
+    st.dataframe(aggregated_data.head(10))
 
     best_song = aggregated_data.iloc[0]
     worst_song = aggregated_data.iloc[-1]
@@ -80,10 +80,9 @@ if df is not None:
         value_name='Value'
     )
     df_melted['trackName'] = df_melted['trackName'].apply(fix_hebrew)
+    st.bar_chart(data=df_melted, x='trackName', y='Value', x_label='שם שיר', y_label='כמות האזנות', color=None, horizontal=False, stack=None, width=None, height=None, use_container_width=True)
 
-    fig, ax = plt.subplots(figsize=(8,4))
-    sns.barplot(data=df_melted, x='trackName', y='Value', hue='Metric', palette='Set2', ax=ax)
-    st.pyplot(fig)
+
 
     # --- שירים לפי שבועות ---
     st.header("📅 כמה שבועות שיר נשמע")
