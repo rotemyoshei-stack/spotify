@@ -16,19 +16,36 @@ def fix_hebrew(text):
 
 st.set_page_config(page_title="Spotify Trends", layout="wide")
 st.title("🎵 Spotify Trends Dashboard")
+import os
+import json
+import pandas as pd
+import streamlit as st
 
-# --- טעינת נתונים ---
-st.sidebar.header("📂 בחירת נתונים")
-data_path = st.sidebar.text_input("נתיב לקובץ JSON", "spotify_data.json")
+# --- בחירת תיקייה ---
+st.sidebar.header("📂 בחירת תיקייה")
+folder_name = st.sidebar.text_input("שם תיקייה עם קבצי JSON", "data_folder")
 
-if os.path.exists(data_path):
-    with open(data_path, "r", encoding="utf-8") as f:
-        all_data = json.load(f)
-    df = pd.DataFrame(all_data)
-    st.sidebar.success("✅ נתונים נטענו בהצלחה")
+# נבדוק אם התיקייה קיימת
+if os.path.exists(folder_name) and os.path.isdir(folder_name):
+    json_files = [f for f in os.listdir(folder_name) if f.endswith(".json")]
+    
+    if json_files:
+        all_data = []
+        for file_name in json_files:
+            file_path = os.path.join(folder_name, file_name)
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                all_data.extend(data if isinstance(data, list) else [data])
+        
+        df = pd.DataFrame(all_data)
+        st.sidebar.success(f"✅ נטענו {len(json_files)} קבצים")
+    else:
+        st.sidebar.warning("⚠️ אין קבצי JSON בתיקייה")
+        df = None
 else:
-    st.sidebar.warning("⚠️ הקובץ לא נמצא. העלי אותו לריפו או שימי נתיב נכון.")
+    st.sidebar.warning("⚠️ התיקייה לא קיימת")
     df = None
+
 
 if df is not None:
     # --- עיבוד ראשוני ---
