@@ -4,7 +4,6 @@ from pandas import json_normalize
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-import pandas as pd
 # from bidi.algorithm import fix_hebrew
 from matplotlib import rcParams
 import os
@@ -348,4 +347,40 @@ plt.show()
 
 # connect to songs DB
 
-!pip install streamlit
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# כותרת ראשית
+st.title("Spotify Trends 🎵")
+
+# דוגמה לנתונים (תוכלי להחליף בנתונים האמיתיים שלך)
+data = pd.DataFrame({
+    "Day": range(1, 11),
+    "Streams": np.random.randint(500, 2000, 10)
+})
+
+# מציגים טבלה
+st.subheader("Raw Data")
+st.write(data)
+
+# גרף אינטראקטיבי
+st.subheader("Line Chart")
+st.line_chart(data.set_index("Day"))
+
+# גרף מותאם אישית עם matplotlib
+st.subheader("Custom Matplotlib Plot")
+fig, ax = plt.subplots()
+ax.plot(data["Day"], data["Streams"], marker="o")
+ax.set_xlabel("Day")
+ax.set_ylabel("Streams")
+ax.set_title("Spotify Streams Trend")
+st.pyplot(fig)
+
+# תובנות
+st.subheader("Insights")
+if data["Streams"].iloc[-1] > data["Streams"].iloc[0]:
+    st.success("✅ המגמה הכללית היא עליה בהשמעות לאורך הימים 🎶")
+else:
+    st.warning("⚠️ נראה שיש ירידה בהשמעות בימים האחרונים")
