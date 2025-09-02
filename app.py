@@ -64,8 +64,7 @@ if df is not None:
 
     st.header("📊 אחוזי האזנה לשירים")
 
-    best_song = aggregated_data.sort_values(by=['times_played','avg_percentage'])iloc[0]
-    worst_song = aggregated_data.iloc[-1]
+    best_song = aggregated_data.sort_values(by=['times_played','avg_percentage']).iloc[0]    worst_song = aggregated_data.iloc[-1]
     st.success(f"🎶 השיר עם האחוז הגבוה ביותר הוא **{fix_hebrew(best_song['trackName'])}** ({best_song['avg_percentage']:.1f}%)")
     st.warning(f"⚠️ השיר עם האחוז הנמוך ביותר הוא **{fix_hebrew(worst_song['trackName'])}** ({worst_song['avg_percentage']:.1f}%)")
 
