@@ -74,4 +74,65 @@ if df is not None:
     df_melted = low_songs.melt(
         id_vars='trackName',
         value_vars=['times_played','avg_percentage'],
-        var_name='_
+        var_name='Metric',
+        value_name='Value'
+    )
+    df_melted['trackName'] = df_melted['trackName'].apply(fix_hebrew)
+    st.bar_chart(
+        data=df_melted,
+        x='trackName',
+        y='Value',
+        x_label=fix_hebrew('שם שיר'),
+        y_label=fix_hebrew('כמות האזנות'),
+        use_container_width=True
+    )
+
+    # --- שירים לפי שבועות ---
+    st.header(fix_hebrew("📅 כמה שבועות שיר נשמע"))
+    df_unique_weeks = df[['trackName','weekNum']].drop_duplicates().sort_values(by=['weekNum','trackName'])
+    weeks_aggregated_data = df_unique_weeks.groupby('trackName').agg(weeks_listened_to=('weekNum', 'count')).reset_index()
+
+    st.dataframe(weeks_aggregated_data.sort_values(by='weeks_listened_to', ascending=False).head(10))
+
+    fig, ax = plt.subplots(figsize=(8,4))
+    sns.histplot(x='weeks_listened_to', data=weeks_aggregated_data, bins=20, ax=ax)
+    ax.set_title(fix_hebrew("משך זמן הופעה במצעד שבועי"))
+    st.pyplot(fig)
+
+    st.success(fix_hebrew(f"🏆 השיר שהחזיק הכי הרבה שבועות: **{weeks_aggregated_data.iloc[0]['trackName']}** ({weeks_aggregated_data.iloc[0]['weeks_listened_to']} שבועות)"))
+
+    # --- ניתוח פלייליסטים ---
+    st.header(fix_hebrew("📂 ניתוח פלייליסטים"))
+    playlist_file = "Playlist1.json"
+    if os.path.exists(playlist_file):
+        with open(playlist_file, "r", encoding="utf-8") as file:
+            playlist_json = json.load(file)
+
+        playlist_data = []
+        for playlist in playlist_json["playlists"]:
+            playlist_name = fix_hebrew(playlist.get("name", "לא ידוע"))
+            items = playlist.get("items", [])
+            for item in items:
+                track = item.get("track", {})
+                playlist_data.append({
+                    "שם פלייליסט": playlist_name,
+                    "שם שיר": fix_hebrew(track.get("trackName")),
+                    "שם אמן": fix_hebrew(track.get("artistName")),
+                })
+
+        pl_df = pd.DataFrame(playlist_data)
+        st.dataframe(pl_df.head(20))
+
+        # כמה פעמים שיר מופיע בפלייליסטים
+        agg = pl_df.groupby("שם שיר").size().reset_index(name="כמות הופעות").sort_values(by="כמות הופעות", ascending=False)
+        st.subheader(fix_hebrew("🎼 השירים הכי פופולריים בפלייליסטים"))
+        st.dataframe(agg.head(10))
+
+        fig, ax = plt.subplots(figsize=(8,4))
+        sns.barplot(agg.head(10), y="שם שיר", x="כמות הופעות", ax=ax)
+        ax.set_title(fix_hebrew("השירים המובילים בפלייליסטים"))
+        st.pyplot(fig)
+
+        st.info(fix_hebrew(f"⭐️ השיר שמופיע הכי הרבה בפלייליסטים הוא **{agg.iloc[0]['שם שיר']}** ({agg.iloc[0]['כמות הופעות']} הופעות)"))
+    else:
+        st.warning(fix_hebrew("⚠️ לא נמצא קובץ Playlist1.json"))
