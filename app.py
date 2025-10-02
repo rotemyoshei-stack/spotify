@@ -13,10 +13,13 @@ def fix_hebrew(text):
         reshaped = arabic_reshaper.reshape(text)
         return get_display(reshaped)
     return text
-    
+
+# קיצור לשימוש נוח
+h = fix_hebrew
+
 # --- בחירת תיקייה ---
-st.sidebar.header("📂 בחירת תיקייה")
-folder_name = st.sidebar.text_input(fix_hebrew("שם תיקייה עם קבצי JSON"), "data_folder")
+st.sidebar.header(h("📂 בחירת תיקייה"))
+folder_name = st.sidebar.text_input(h("שם תיקייה עם קבצי JSON"), "data_folder")
 
 # נבדוק אם התיקייה קיימת
 if os.path.exists(folder_name) and os.path.isdir(folder_name):
@@ -31,23 +34,25 @@ if os.path.exists(folder_name) and os.path.isdir(folder_name):
                 all_data.extend(data if isinstance(data, list) else [data])
         
         df = pd.DataFrame(all_data)
-        st.sidebar.success(fix_hebrew(f"✅ נטענו {len(json_files)} קבצים"))
+        st.sidebar.success(h(f"✅ נטענו {len(json_files)} קבצים"))
     else:
-        st.sidebar.warning(fix_hebrew("⚠️ אין קבצי JSON בתיקייה"))
+        st.sidebar.warning(h("⚠️ אין קבצי JSON בתיקייה"))
         df = None
 else:
-    st.sidebar.warning(fix_hebrew("⚠️ התיקייה לא קיימת"))
+    st.sidebar.warning(h("⚠️ התיקייה לא קיימת"))
     df = None
 
-if df is not None:
+if df is not None and not df.empty:
     # --- עיבוד ראשוני ---
+    # שומרים עותק מקורי לשימוש פנימי, ונכין עותק להצגה
+    # (לא משנים שמות העמודות המקוריות כי הקוד משתמש בהן)
     df['endTime'] = pd.to_datetime(df['endTime'])
-    df['secondsPlayed'] = df['msPlayed']/1000
+    df['secondsPlayed'] = df['msPlayed'] / 1000
     df['timePlayed'] = pd.to_timedelta(df['secondsPlayed'], unit='second')
     df['startTime'] = df['endTime'] - df['timePlayed']
     df['weekNum'] = df['startTime'].dt.isocalendar().week
 
-    st.header(fix_hebrew("🎧 ברוכים הבאים ל־Spotify Wrapped משודרג"))
+    st.header(h("🎧 ברוכים הבאים — Spotify Wrapped משודרג"))
 
     # --- ניתוח אחוזי האזנה ---
     aggregated_data = df.groupby(['trackName','artistName']).agg(
@@ -61,78 +66,39 @@ if df is not None:
     aggregated_data = aggregated_data[aggregated_data['max_song_length'] > pd.Timedelta(seconds=60)]
     aggregated_data = aggregated_data.sort_values(by='avg_percentage', ascending=False)
 
-    st.header(fix_hebrew("📊 אחוזי האזנה לשירים"))
+    st.header(h("📊 אחוזי האזנה לשירים"))
 
-    best_song = aggregated_data.sort_values(by=['times_played','avg_percentage']).iloc[0]
-    worst_song = aggregated_data.iloc[-1]
-    st.success(fix_hebrew(f"🎶 השיר עם אחוז ההאזנה הגבוה ביותר הוא **{best_song['trackName']}** ({best_song['avg_percentage']:.1f}%)"))
-    st.warning(fix_hebrew(f"⚠️ השיר עם אחוז ההאזנה הנמוך ביותר הוא **{worst_song['trackName']}** ({worst_song['avg_percentage']:.1f}%)"))
+    if not aggregated_data.empty:
+        # הצגה ידידותית בעברית של הטבלה
+        aggregated_display = aggregated_data.copy()
+        aggregated_display['trackName'] = aggregated_display['trackName'].apply(lambda x: h(x) if isinstance(x, str) else x)
+        aggregated_display['artistName'] = aggregated_display['artistName'].apply(lambda x: h(x) if isinstance(x, str) else x)
+        aggregated_display.rename(columns={
+            'trackName': h('שם שיר'),
+            'artistName': h('שם אמן'),
+            'avg_play_time': h('משך ממוצע'),
+            'times_played': h('כמות האזנות'),
+            'max_song_length': h('אורך שיר מקסימלי'),
+            'avg_percentage': h('אחוז האזנה')
+        }, inplace=True)
 
-    # גרף ברים לנטישה
-    st.subheader(fix_hebrew("📉 שירים עם אחוזי האזנה נמוכים ביותר"))
-    low_songs = aggregated_data.sort_values(by='avg_percentage').head(5)
-    df_melted = low_songs.melt(
-        id_vars='trackName',
-        value_vars=['times_played','avg_percentage'],
-        var_name='Metric',
-        value_name='Value'
-    )
-    df_melted['trackName'] = df_melted['trackName'].apply(fix_hebrew)
-    st.bar_chart(
-        data=df_melted,
-        x='trackName',
-        y='Value',
-        x_label=fix_hebrew('שם שיר'),
-        y_label=fix_hebrew('כמות האזנות'),
-        use_container_width=True
-    )
+        st.dataframe(aggregated_display.head(15))
 
-    # --- שירים לפי שבועות ---
-    st.header(fix_hebrew("📅 כמה שבועות שיר נשמע"))
-    df_unique_weeks = df[['trackName','weekNum']].drop_duplicates().sort_values(by=['weekNum','trackName'])
-    weeks_aggregated_data = df_unique_weeks.groupby('trackName').agg(weeks_listened_to=('weekNum', 'count')).reset_index()
+        # בחירת השיר הטוב והגרוע (בהתאם לסינון הנ"ל)
+        best_song = aggregated_data.sort_values(by=['times_played','avg_percentage'], ascending=[False, False]).iloc[0]
+        worst_song = aggregated_data.sort_values(by='avg_percentage', ascending=True).iloc[0]
 
-    st.dataframe(weeks_aggregated_data.sort_values(by='weeks_listened_to', ascending=False).head(10))
+        st.success(h("🎶 השיר עם אחוז ההאזנה הגבוה ביותר הוא ") + " " + h(best_song['trackName']) + f" ({best_song['avg_percentage']:.1f}%)")
+        st.warning(h("⚠️ השיר עם אחוז ההאזנה הנמוך ביותר הוא ") + " " + h(worst_song['trackName']) + f" ({worst_song['avg_percentage']:.1f}%)")
 
-    fig, ax = plt.subplots(figsize=(8,4))
-    sns.histplot(x='weeks_listened_to', data=weeks_aggregated_data, bins=20, ax=ax)
-    ax.set_title(fix_hebrew("משך זמן הופעה במצעד שבועי"))
-    st.pyplot(fig)
-
-    st.success(fix_hebrew(f"🏆 השיר שהחזיק הכי הרבה שבועות: **{weeks_aggregated_data.iloc[0]['trackName']}** ({weeks_aggregated_data.iloc[0]['weeks_listened_to']} שבועות)"))
-
-    # --- ניתוח פלייליסטים ---
-    st.header(fix_hebrew("📂 ניתוח פלייליסטים"))
-    playlist_file = "Playlist1.json"
-    if os.path.exists(playlist_file):
-        with open(playlist_file, "r", encoding="utf-8") as file:
-            playlist_json = json.load(file)
-
-        playlist_data = []
-        for playlist in playlist_json["playlists"]:
-            playlist_name = fix_hebrew(playlist.get("name", "לא ידוע"))
-            items = playlist.get("items", [])
-            for item in items:
-                track = item.get("track", {})
-                playlist_data.append({
-                    "שם פלייליסט": playlist_name,
-                    "שם שיר": fix_hebrew(track.get("trackName")),
-                    "שם אמן": fix_hebrew(track.get("artistName")),
-                })
-
-        pl_df = pd.DataFrame(playlist_data)
-        st.dataframe(pl_df.head(20))
-
-        # כמה פעמים שיר מופיע בפלייליסטים
-        agg = pl_df.groupby("שם שיר").size().reset_index(name="כמות הופעות").sort_values(by="כמות הופעות", ascending=False)
-        st.subheader(fix_hebrew("🎼 השירים הכי פופולריים בפלייליסטים"))
-        st.dataframe(agg.head(10))
-
-        fig, ax = plt.subplots(figsize=(8,4))
-        sns.barplot(agg.head(10), y="שם שיר", x="כמות הופעות", ax=ax)
-        ax.set_title(fix_hebrew("השירים המובילים בפלייליסטים"))
-        st.pyplot(fig)
-
-        st.info(fix_hebrew(f"⭐️ השיר שמופיע הכי הרבה בפלייליסטים הוא **{agg.iloc[0]['שם שיר']}** ({agg.iloc[0]['כמות הופעות']} הופעות)"))
-    else:
-        st.warning(fix_hebrew("⚠️ לא נמצא קובץ Playlist1.json"))
+        # גרף ברים לשירים עם אחוזים נמוכים
+        st.subheader(h("📉 שירים עם אחוזי האזנה נמוכים ביותר"))
+        low_songs = aggregated_data.sort_values(by='avg_percentage').head(5)
+        if not low_songs.empty:
+            fig, ax = plt.subplots(figsize=(8,4))
+            x = low_songs['trackName'].apply(lambda s: h(s) if isinstance(s, str) else s)
+            y = low_songs['avg_percentage']
+            ax.bar(x, y)
+            ax.set_xlabel(h('שם שיר'))
+            ax.set_ylabel(h('אחוז האזנה'))
+            ax.set_title(h('שירים עם אחוזי_
